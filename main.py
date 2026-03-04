@@ -62,11 +62,14 @@ def print_usage_guide() -> None:
         "  blog -h                       Show this help\n"
         "\n"
         "Options:\n"
-        f"  -o, --output-dir <path>       Recording directory (default: {DEFAULT_OUTPUT_DIR})\n"
-        "  -m, --media <path>            Media to publish with post\n"
-        "  -e, --edit                    Compose post in $EDITOR\n"
+        f"  -o <path>                     Recording directory (default: {DEFAULT_OUTPUT_DIR})\n"
+        "  -m <path>                     Media to publish with post\n"
+        "  -e                            Compose post in $EDITOR\n"
         "  -rec                          Start recording\n"
         "  -stp                          Stop recording and run trim+publish flow\n"
+        "  -a                            Webcam preview helper\n"
+        "  -pl                           Play latest recording\n"
+        "  -c                            Clear saved recordings\n"
         f"\nConfig:\n"
         f"  {CONFIG_FILE} (auto-created)\n"
         "  publish.x / publish.linkedin control publish commands\n"
@@ -1149,19 +1152,19 @@ def align_webcam() -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument("-h", "--help", action="store_true", dest="help_flag")
-    parser.add_argument("-v", "--version", action="store_true")
-    parser.add_argument("-u", "--upgrade", action="store_true")
-    parser.add_argument("-e", "--edit", action="store_true", help="Compose post in $EDITOR.")
-    parser.add_argument("-m", "--media", help="Media path to publish.")
+    parser.add_argument("-h", action="store_true", dest="help_flag")
+    parser.add_argument("-v", action="store_true", dest="version")
+    parser.add_argument("-u", action="store_true", dest="upgrade")
+    parser.add_argument("-e", action="store_true", dest="edit", help="Compose post in $EDITOR.")
+    parser.add_argument("-m", dest="media", help="Media path to publish.")
     parser.add_argument("-rec", action="store_true", help="Start recording.")
     parser.add_argument("-stp", action="store_true", help="Stop recording and run trim+publish flow.")
-    parser.add_argument("--align", action="store_true", help="Open webcam align preview.")
-    parser.add_argument("--play-latest", action="store_true", help="Play latest recording.")
-    parser.add_argument("--clear", action="store_true", help="Clear saved recordings.")
+    parser.add_argument("-a", action="store_true", dest="align", help="Open webcam align preview.")
+    parser.add_argument("-pl", action="store_true", dest="play_latest", help="Play latest recording.")
+    parser.add_argument("-c", action="store_true", dest="clear", help="Clear saved recordings.")
     parser.add_argument(
         "-o",
-        "--output-dir",
+        dest="output_dir",
         default=str(DEFAULT_OUTPUT_DIR),
         help=f"Output directory for recordings (default: {DEFAULT_OUTPUT_DIR})",
     )
