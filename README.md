@@ -47,6 +47,8 @@ Notes:
 
 - Default output directory is `~/Vlogs`
 - Recordings are grayscale, web-optimized (HD-light settings), and include default-device audio
+- Webcam video is composited live in the bottom-right corner
+- Capture is done as a single live pipeline to keep audio/video/webcam aligned
 - Only one active recording is allowed at a time
 
 ## Install from releases
