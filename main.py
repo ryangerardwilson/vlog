@@ -4,6 +4,7 @@ import curses
 import fcntl
 import json
 import os
+import readline
 import shlex
 import shutil
 import signal
@@ -263,6 +264,16 @@ def _compose_text_in_editor(initial_text: str = "") -> str:
 
 
 def prompt_publish_text() -> str | None:
+    # Ensure familiar shell-style inline editing bindings in the prompt.
+    # Works with GNU readline terminals where Alt is sent as Meta.
+    try:
+        readline.parse_and_bind("set editing-mode emacs")
+        readline.parse_and_bind("\\ef: forward-word")
+        readline.parse_and_bind("\\eb: backward-word")
+        readline.parse_and_bind("\\C-w: unix-word-rubout")
+    except Exception:
+        pass
+
     print("")
     print("Enter accompanying post text (type 'v' to open $EDITOR, blank to skip publish):")
     raw = input("> ").strip()
@@ -683,6 +694,29 @@ def handle_publish_flow(video_file: Path) -> None:
         print(f"- {failure}")
 
 
+def cleanup_recording_cache(output_dir: Path) -> None:
+    patterns = [
+        "blog_*.mp4",
+        "blog_*.screen.mkv",
+        "blog_*.av.mkv",
+        "*.trim.mp4",
+        "*.tmp.mp4",
+        "blog_recorder.log",
+    ]
+    deleted = 0
+    for pattern in patterns:
+        for file_path in output_dir.glob(pattern):
+            if not file_path.is_file():
+                continue
+            try:
+                file_path.unlink()
+                deleted += 1
+            except OSError:
+                pass
+    if deleted:
+        print(f"Cleared {deleted} cached file(s) from: {output_dir}")
+
+
 def _split_text_and_media_arg(text_parts: list[str], explicit_media: str | None) -> tuple[str | None, Path | None]:
     parts = list(text_parts)
     media = Path(explicit_media).expanduser() if explicit_media else None
@@ -952,6 +986,7 @@ def stop_recording() -> int:
                 if output_file and Path(output_file).exists():
                     print(f"Saved: {output_file} (grayscale + webcam overlay)")
                     handle_publish_flow(Path(output_file))
+                    cleanup_recording_cache(Path(output_file).parent)
                 else:
                     print(
                         f"Recorder stopped, but output file was not produced. Check {Path(output_file).parent / 'blog_recorder.log'}"
@@ -1004,6 +1039,7 @@ def stop_recording() -> int:
         if output_file and Path(output_file).exists():
             print(f"Saved: {output_file} (grayscale + webcam overlay)")
             handle_publish_flow(Path(output_file))
+            cleanup_recording_cache(Path(output_file).parent)
         else:
             print(
                 f"Recorder stopped, but output file was not produced. Check {Path(output_file).parent / 'blog_recorder.log'}"

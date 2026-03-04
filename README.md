@@ -42,6 +42,8 @@ Stop recording, open trim UI, prompt for publish text, then publish:
 python main.py -stp
 ```
 
+After `-stp`, recorder cache files in the output directory are auto-cleared, so they do not accumulate.
+
 ## Other flags
 
 - `-u`, `--upgrade`: upgrade to latest release
