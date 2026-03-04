@@ -1,0 +1,31 @@
+# Python bytecode/cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Build/packaging
+build/
+dist/
+*.egg-info/
+
+# OS/editor noise
+.DS_Store
+.idea/
+.vscode/
+
+# Local runtime state for vlog CLI
+.vlog_recorder_state.json
+
+# Local logs
+*.log
