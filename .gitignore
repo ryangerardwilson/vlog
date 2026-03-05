@@ -29,3 +29,6 @@ dist/
 
 # Local logs
 *.log
+
+# Local video outputs
+*.mp4

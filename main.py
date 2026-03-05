@@ -57,6 +57,7 @@ def print_usage_guide() -> None:
         "  blog -m /path/to/media.mp4    Publish media only (or with text/-e)\n"
         "  blog -rec                     Start recording\n"
         "  blog -stp                     Stop recording, trim, and publish\n"
+        "  blog -rectest                 Stop recording, trim, and save ./output.mp4\n"
         "  blog -v                       Print version\n"
         "  blog -u                       Upgrade to latest version\n"
         "  blog -h                       Show this help\n"
@@ -67,6 +68,7 @@ def print_usage_guide() -> None:
         "  -e                            Compose post in $EDITOR\n"
         "  -rec                          Start recording\n"
         "  -stp                          Stop recording and run trim+publish flow\n"
+        "  -rectest                      Stop recording and save output.mp4 in current directory\n"
         "  -a                            Webcam preview helper\n"
         "  -pl                           Play latest recording\n"
         "  -c                            Clear saved recordings\n"
@@ -618,6 +620,16 @@ def run_trim_tui(video_file: Path) -> tuple[bool, float, float]:
             return count
 
         curses.curs_set(0)
+        if curses.has_colors():
+            curses.start_color()
+            try:
+                if hasattr(curses, "assume_default_colors"):
+                    curses.assume_default_colors(-1, -1)
+                else:
+                    curses.use_default_colors()
+            except curses.error:
+                pass
+            stdscr.bkgd(" ", curses.color_pair(0))
         stdscr.nodelay(True)
         stdscr.timeout(50)
         play_audio_at(cursor)
@@ -716,6 +728,26 @@ def handle_publish_flow(video_file: Path) -> bool:
     for failure in failures:
         print(f"- {failure}")
     return False
+
+
+def handle_rectest_flow(video_file: Path) -> bool:
+    trim_ok, trim_msg = launch_trim_tui_and_apply(video_file)
+    if trim_msg:
+        print(trim_msg)
+    if not trim_ok:
+        print("Post-trim failed.")
+        return False
+
+    destination = Path.cwd() / "output.mp4"
+    try:
+        destination.unlink(missing_ok=True)
+        video_file.replace(destination)
+    except OSError as exc:
+        print(f"Failed to save output.mp4 in current directory: {exc}")
+        return False
+
+    print(f"Saved test output: {destination}")
+    return True
 
 
 def cleanup_recording_cache(output_dir: Path) -> None:
@@ -955,7 +987,7 @@ def start_recording(output_dir: Path) -> int:
     return 0
 
 
-def stop_recording() -> int:
+def stop_recording(rectest: bool = False) -> int:
     state = load_state()
     if not state:
         print("No active recording found.")
@@ -1008,7 +1040,10 @@ def stop_recording() -> int:
             if ok:
                 if output_file and Path(output_file).exists():
                     print(f"Saved: {output_file} (grayscale + webcam overlay)")
-                    handle_publish_flow(Path(output_file))
+                    if rectest:
+                        handle_rectest_flow(Path(output_file))
+                    else:
+                        handle_publish_flow(Path(output_file))
                     cleanup_recording_cache(Path(output_file).parent)
                 else:
                     print(
@@ -1061,7 +1096,10 @@ def stop_recording() -> int:
     if ok:
         if output_file and Path(output_file).exists():
             print(f"Saved: {output_file} (grayscale + webcam overlay)")
-            handle_publish_flow(Path(output_file))
+            if rectest:
+                handle_rectest_flow(Path(output_file))
+            else:
+                handle_publish_flow(Path(output_file))
             cleanup_recording_cache(Path(output_file).parent)
         else:
             print(
@@ -1179,6 +1217,7 @@ def main() -> int:
     parser.add_argument("-m", dest="media", help="Media path to publish.")
     parser.add_argument("-rec", action="store_true", help="Start recording.")
     parser.add_argument("-stp", action="store_true", help="Stop recording and run trim+publish flow.")
+    parser.add_argument("-rectest", action="store_true", help="Stop recording and save output.mp4 in current directory.")
     parser.add_argument("-a", action="store_true", dest="align", help="Open webcam align preview.")
     parser.add_argument("-pl", action="store_true", dest="play_latest", help="Play latest recording.")
     parser.add_argument("-c", action="store_true", dest="clear", help="Clear saved recordings.")
@@ -1212,12 +1251,13 @@ def main() -> int:
         action_flags = [
             bool(args.rec),
             bool(args.stp),
+            bool(args.rectest),
             bool(args.align),
             bool(args.play_latest),
             bool(args.clear),
         ]
         if sum(action_flags) > 1:
-            print("Use only one action flag at a time: -rec, -stp, --align, --play-latest, --clear.")
+            print("Use only one action flag at a time: -rec, -stp, -rectest, --align, --play-latest, --clear.")
             return 1
 
         output_dir = Path(args.output_dir).expanduser()
@@ -1240,6 +1280,11 @@ def main() -> int:
                 print("-stp does not accept post text/media flags.")
                 return 1
             return stop_recording()
+        if args.rectest:
+            if args.edit or args.media or args.text:
+                print("-rectest does not accept post text/media flags.")
+                return 1
+            return stop_recording(rectest=True)
         if args.align:
             if args.edit or args.media or args.text:
                 print("--align does not accept post text/media flags.")

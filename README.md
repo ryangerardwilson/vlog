@@ -42,6 +42,12 @@ Stop recording, open trim UI, prompt for publish text, then publish:
 python main.py -stp
 ```
 
+Stop recording, open trim UI, and save local test output to `./output.mp4` (no social publish):
+
+```bash
+python main.py -rectest
+```
+
 After `-stp`, recorder cache files in the output directory are auto-cleared, so they do not accumulate.
 
 ## Other flags
