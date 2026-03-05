@@ -305,6 +305,26 @@ def publish_content(post_text: str | None, media_file: Path | None, config: dict
     return len(failures) == 0, failures
 
 
+def preflight_publish_auth(config: dict) -> tuple[bool, list[str]]:
+    publish = config.get("publish") if isinstance(config, dict) else None
+    if not isinstance(publish, dict):
+        return False, ["Invalid config: missing object at key 'publish'."]
+
+    failures: list[str] = []
+    for target_name in ("x", "linkedin"):
+        cmd = _build_publish_command(publish.get(target_name), None, None)
+        if not cmd:
+            failures.append(f"{target_name}: missing publish command in config")
+            continue
+        executable = os.path.basename(cmd[0])
+        if executable not in ("x", "linkedin"):
+            continue
+        proc = subprocess.run(cmd + ["-ea"])
+        if proc.returncode != 0:
+            failures.append(f"{target_name}: auth preflight failed with exit code {proc.returncode}")
+    return len(failures) == 0, failures
+
+
 def detect_screen_size() -> str | None:
     if shutil.which("xrandr"):
         try:
@@ -674,32 +694,32 @@ def launch_trim_tui_and_apply(video_file: Path) -> tuple[bool, str]:
     return True, f"Trim applied: {trim_start:.2f}s -> {trim_end:.2f}s"
 
 
-def handle_publish_flow(video_file: Path) -> None:
+def handle_publish_flow(video_file: Path) -> bool:
     trim_ok, trim_msg = launch_trim_tui_and_apply(video_file)
     if trim_msg:
         print(trim_msg)
     if not trim_ok:
         print("Post-trim failed.")
-        return
+        return False
 
     post_text = prompt_publish_text()
     if not post_text:
         print("Skipped publish (no post text provided).")
-        return
+        return False
 
     config = load_or_init_config()
     ok, failures = publish_content(post_text, video_file, config)
     if ok:
         print("Published to x and linkedin.")
-        return
+        return True
     print("Publish finished with errors:")
     for failure in failures:
         print(f"- {failure}")
+    return False
 
 
 def cleanup_recording_cache(output_dir: Path) -> None:
     patterns = [
-        "blog_*.mp4",
         "blog_*.screen.mkv",
         "blog_*.av.mkv",
         "*.trim.mp4",
@@ -1205,6 +1225,14 @@ def main() -> int:
         if args.rec:
             if args.edit or args.media or args.text:
                 print("-rec does not accept post text/media flags.")
+                return 1
+            config = load_or_init_config()
+            ok, failures = preflight_publish_auth(config)
+            if not ok:
+                print("Publish auth preflight failed:")
+                for failure in failures:
+                    print(f"- {failure}")
+                print("Recording did not start.")
                 return 1
             return start_recording(Path(args.output_dir).expanduser())
         if args.stp:
