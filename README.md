@@ -36,6 +36,12 @@ Start recording:
 python main.py -rec
 ```
 
+Start recording with sync diagnostics (writes a `sync_report_*.json` on stop):
+
+```bash
+python main.py -rec --debug-sync
+```
+
 Stop recording, open trim UI, prompt for publish text, then publish:
 
 ```bash

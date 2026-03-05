@@ -56,6 +56,7 @@ def print_usage_guide() -> None:
         "  blog -e                       Compose text in $EDITOR and publish\n"
         "  blog -m /path/to/media.mp4    Publish media only (or with text/-e)\n"
         "  blog -rec                     Start recording\n"
+        "  blog -rec --debug-sync        Start recording with sync diagnostics\n"
         "  blog -stp                     Stop recording, trim, and publish\n"
         "  blog -rectest                 Stop recording, trim, and save ./output.mp4\n"
         "  blog -v                       Print version\n"
@@ -67,6 +68,7 @@ def print_usage_guide() -> None:
         "  -m <path>                     Media to publish with post\n"
         "  -e                            Compose post in $EDITOR\n"
         "  -rec                          Start recording\n"
+        "  --debug-sync                  Write ffmpeg/ffprobe sync diagnostics on stop\n"
         "  -stp                          Stop recording and run trim+publish flow\n"
         "  -rectest                      Stop recording and save output.mp4 in current directory\n"
         "  -a                            Webcam preview helper\n"
@@ -418,6 +420,8 @@ def build_webcam_audio_command(av_file: Path, webcam_device: str) -> list[str]:
         "640x480",
         "-i",
         webcam_device,
+        "-thread_queue_size",
+        "1024",
         "-f",
         "pulse",
         "-i",
@@ -440,6 +444,79 @@ def build_webcam_audio_command(av_file: Path, webcam_device: str) -> list[str]:
         "48000",
         str(av_file),
     ]
+
+
+def build_unified_record_command_x11(output_file: Path, display: str, webcam_device: str) -> list[str]:
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-fflags",
+        "+genpts",
+        "-thread_queue_size",
+        "1024",
+        "-f",
+        "x11grab",
+        "-framerate",
+        WEB_FPS,
+    ]
+    size = detect_screen_size()
+    if size:
+        cmd.extend(["-video_size", size])
+    cmd.extend(
+        [
+            "-i",
+            display,
+            "-thread_queue_size",
+            "1024",
+            "-f",
+            "v4l2",
+            "-framerate",
+            "30",
+            "-video_size",
+            "640x480",
+            "-i",
+            webcam_device,
+            "-thread_queue_size",
+            "1024",
+            "-f",
+            "pulse",
+            "-i",
+            "default",
+            "-filter_complex",
+            build_overlay_filter_complex(),
+            "-map",
+            "[v]",
+            "-map",
+            "2:a?",
+            "-af",
+            "highpass=f=70,"
+            "afftdn=nf=-25:tn=1,"
+            "equalizer=f=120:t=q:w=1.0:g=5,"
+            "equalizer=f=220:t=q:w=1.0:g=2.5,"
+            "equalizer=f=2600:t=q:w=1.2:g=-2.0,"
+            "volume=1.8",
+            "-c:v",
+            "libx264",
+            "-preset",
+            WEB_PRESET,
+            "-crf",
+            WEB_CRF,
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            WEB_AUDIO_BITRATE,
+            "-ac",
+            "2",
+            "-ar",
+            "48000",
+            "-movflags",
+            "+faststart",
+            str(output_file),
+        ]
+    )
+    return cmd
 
 
 def wait_for_recording_start(
@@ -485,6 +562,117 @@ def probe_duration_seconds(media_file: Path) -> float:
         return float(out)
     except Exception:
         return 0.0
+
+
+def probe_sync_report(media_file: Path) -> dict:
+    report: dict = {"file": str(media_file), "exists": media_file.exists()}
+    if not media_file.exists():
+        return report
+
+    fmt_cmd = [
+        "ffprobe",
+        "-v",
+        "error",
+        "-print_format",
+        "json",
+        "-show_format",
+        "-show_streams",
+        str(media_file),
+    ]
+    try:
+        fmt_payload = json.loads(subprocess.check_output(fmt_cmd, text=True))
+    except Exception as exc:
+        report["probe_error"] = str(exc)
+        return report
+
+    fmt = fmt_payload.get("format", {}) if isinstance(fmt_payload, dict) else {}
+    report["format"] = {
+        "duration": fmt.get("duration"),
+        "start_time": fmt.get("start_time"),
+        "bit_rate": fmt.get("bit_rate"),
+        "size": fmt.get("size"),
+    }
+
+    stream_stats: list[dict] = []
+    streams = fmt_payload.get("streams", []) if isinstance(fmt_payload, dict) else []
+    pkt_cmd = [
+        "ffprobe",
+        "-v",
+        "error",
+        "-show_packets",
+        "-show_entries",
+        "packet=stream_index,pts_time,dts_time,duration_time",
+        "-of",
+        "json",
+        str(media_file),
+    ]
+    packets_by_stream: dict[int, list[dict]] = {}
+    try:
+        pkt_payload = json.loads(subprocess.check_output(pkt_cmd, text=True))
+        packets = pkt_payload.get("packets", []) if isinstance(pkt_payload, dict) else []
+        if isinstance(packets, list):
+            for packet in packets:
+                if not isinstance(packet, dict):
+                    continue
+                stream_index = packet.get("stream_index")
+                if isinstance(stream_index, int):
+                    packets_by_stream.setdefault(stream_index, []).append(packet)
+    except Exception as exc:
+        report["packet_probe_error"] = str(exc)
+
+    for stream in streams:
+        if not isinstance(stream, dict):
+            continue
+        idx = stream.get("index")
+        codec_type = str(stream.get("codec_type", "unknown"))
+        stream_report = {
+            "index": idx,
+            "type": codec_type,
+            "codec": stream.get("codec_name"),
+            "time_base": stream.get("time_base"),
+            "start_time": stream.get("start_time"),
+            "duration": stream.get("duration"),
+            "r_frame_rate": stream.get("r_frame_rate"),
+            "avg_frame_rate": stream.get("avg_frame_rate"),
+            "sample_rate": stream.get("sample_rate"),
+            "channels": stream.get("channels"),
+        }
+        if isinstance(idx, int):
+            stream_packets = packets_by_stream.get(idx, [])
+            if stream_packets:
+                stream_report["packet_count"] = len(stream_packets)
+                first = stream_packets[0]
+                last = stream_packets[-1]
+                stream_report["first_pts_time"] = first.get("pts_time")
+                stream_report["last_pts_time"] = last.get("pts_time")
+        stream_stats.append(stream_report)
+
+    report["streams"] = stream_stats
+    return report
+
+
+def write_sync_diagnostics(
+    output_dir: Path,
+    output_file: Path,
+    screen_file: Path | None = None,
+    av_file: Path | None = None,
+) -> None:
+    ts = time.strftime("%Y%m%d_%H%M%S")
+    report_file = output_dir / f"sync_report_{ts}.json"
+    payload: dict = {
+        "generated_at_epoch": int(time.time()),
+        "output": probe_sync_report(output_file),
+    }
+    if screen_file is not None:
+        payload["screen"] = probe_sync_report(screen_file)
+    if av_file is not None:
+        payload["webcam_audio"] = probe_sync_report(av_file)
+
+    try:
+        report_file.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        print(f"Sync diagnostics saved: {report_file}")
+    except OSError as exc:
+        print(f"Failed to write sync diagnostics: {exc}")
 
 
 def trim_video_precise(media_file: Path, trim_start: float, trim_end: float) -> tuple[bool, str]:
@@ -860,6 +1048,7 @@ def finalize_recording(
         "2",
         "-ar",
         "48000",
+        "-shortest",
         "-avoid_negative_ts",
         "make_zero",
         "-movflags",
@@ -874,12 +1063,13 @@ def finalize_recording(
     return True, ""
 
 
-def start_recording(output_dir: Path) -> int:
+def start_recording(output_dir: Path, debug_sync: bool = False) -> int:
     state = load_state()
     screen_pid = int(state.get("screen_pid", -1)) if state else -1
     av_pid = int(state.get("av_pid", -1)) if state else -1
-    if state and (pid_exists(screen_pid) or pid_exists(av_pid)):
-        active_pid = screen_pid if pid_exists(screen_pid) else av_pid
+    recorder_pid = int(state.get("recorder_pid", -1)) if state else -1
+    if state and (pid_exists(screen_pid) or pid_exists(av_pid) or pid_exists(recorder_pid)):
+        active_pid = recorder_pid if pid_exists(recorder_pid) else (screen_pid if pid_exists(screen_pid) else av_pid)
         print(f"Recording already active (pid={active_pid}): {state.get('output_file', '')}")
         return 1
 
@@ -919,9 +1109,42 @@ def start_recording(output_dir: Path) -> int:
             print("Unable to start recording.")
             print("X11 session detected but DISPLAY is not set.")
             return 1
-        screen_cmd = build_screen_command_x11(screen_file, display)
-        screen_warmup_only = False
-        backend = "x11-split"
+        if not shutil.which("ffmpeg"):
+            print("Unable to start recording.")
+            print("ffmpeg is required.")
+            return 1
+        unified_cmd = build_unified_record_command_x11(output_file, display, webcam_device)
+        with log_file.open("ab") as log:
+            unified_proc = subprocess.Popen(
+                unified_cmd,
+                stdin=subprocess.DEVNULL,
+                stdout=log,
+                stderr=log,
+                start_new_session=True,
+            )
+        print("Initializing unified recorder (screen + webcam + audio)...")
+        unified_ready = wait_for_recording_start(unified_proc, output_file, warmup_only=False, timeout=10.0)
+        if not unified_ready:
+            print(f"Unified recorder did not initialize in time. Check {log_file}")
+            if unified_proc.poll() is None:
+                try:
+                    os.kill(unified_proc.pid, signal.SIGINT)
+                except ProcessLookupError:
+                    pass
+            return 1
+
+        save_state(
+            {
+                "recorder_pid": unified_proc.pid,
+                "output_file": str(output_file),
+                "backend": "x11-unified",
+                "debug_sync": debug_sync,
+                "started_at": int(time.time()),
+            }
+        )
+        print(f"Recording started (pid={unified_proc.pid}).")
+        print(f"Saving to: {output_file} (grayscale + webcam overlay; audio from webcam track)")
+        return 0
 
     av_cmd = build_webcam_audio_command(av_file, webcam_device)
     with log_file.open("ab") as log:
@@ -932,20 +1155,6 @@ def start_recording(output_dir: Path) -> int:
             stderr=log,
             start_new_session=True,
         )
-    print("Initializing webcam+audio recorder...")
-    print("Using audio source: default")
-
-    av_ready = wait_for_recording_start(av_proc, av_file, warmup_only=True, timeout=8.0)
-    if not av_ready:
-        print(f"Webcam+audio recorder did not initialize in time. Check {log_file}")
-        if av_proc.poll() is None:
-            try:
-                os.kill(av_proc.pid, signal.SIGINT)
-            except ProcessLookupError:
-                pass
-        return 1
-
-    with log_file.open("ab") as log:
         screen_proc = subprocess.Popen(
             screen_cmd,
             stdin=subprocess.DEVNULL,
@@ -953,9 +1162,27 @@ def start_recording(output_dir: Path) -> int:
             stderr=log,
             start_new_session=True,
         )
-        print("Initializing screen recorder...")
+    print("Initializing webcam+audio recorder...")
+    print("Using audio source: default")
+    print("Initializing screen recorder...")
 
+    av_ready = wait_for_recording_start(av_proc, av_file, warmup_only=True, timeout=8.0)
     screen_ready = wait_for_recording_start(screen_proc, screen_file, warmup_only=screen_warmup_only, timeout=8.0)
+
+    if not av_ready:
+        print(f"Webcam+audio recorder did not initialize in time. Check {log_file}")
+        if av_proc.poll() is None:
+            try:
+                os.kill(av_proc.pid, signal.SIGINT)
+            except ProcessLookupError:
+                pass
+        if screen_proc.poll() is None:
+            try:
+                os.kill(screen_proc.pid, signal.SIGINT)
+            except ProcessLookupError:
+                pass
+        return 1
+
     if not screen_ready:
         print(f"Screen recorder did not initialize in time. Check {log_file}")
         if screen_proc.poll() is None:
@@ -978,6 +1205,7 @@ def start_recording(output_dir: Path) -> int:
             "screen_file": str(screen_file),
             "av_file": str(av_file),
             "backend": backend,
+            "debug_sync": debug_sync,
             "started_at": int(time.time()),
         }
     )
@@ -993,11 +1221,87 @@ def stop_recording(rectest: bool = False) -> int:
         print("No active recording found.")
         return 1
 
+    backend = str(state.get("backend", ""))
+    if backend == "x11-unified":
+        recorder_pid = int(state.get("recorder_pid", -1))
+        output_file = state.get("output_file", "")
+        debug_sync = bool(state.get("debug_sync"))
+        if recorder_pid <= 0:
+            clear_state()
+            print("Recorder state is invalid. Cleared stale state.")
+            return 1
+        if not pid_exists(recorder_pid):
+            clear_state()
+            print("Recorder process is not running. Cleared stale state.")
+            return 1
+
+        print("Stopping unified recorder...")
+        try:
+            os.kill(recorder_pid, signal.SIGINT)
+            print(f"Stopping recorder (pid={recorder_pid})...")
+        except ProcessLookupError:
+            pass
+
+        print("Stop signal sent. Waiting for capture to finalize...")
+        deadline = time.time() + 20
+        next_progress = time.time() + 1.0
+        while time.time() < deadline:
+            if not pid_exists(recorder_pid):
+                clear_state()
+                print("Stopped recording.")
+                if output_file and Path(output_file).exists():
+                    print(f"Saved: {output_file} (grayscale + webcam overlay)")
+                    if debug_sync:
+                        write_sync_diagnostics(Path(output_file).parent, Path(output_file))
+                    if rectest:
+                        handle_rectest_flow(Path(output_file))
+                    else:
+                        handle_publish_flow(Path(output_file))
+                    cleanup_recording_cache(Path(output_file).parent)
+                else:
+                    print(
+                        f"Recorder stopped, but output file was not produced. Check {Path(output_file).parent / 'blog_recorder.log'}"
+                    )
+                return 0
+            if time.time() >= next_progress:
+                print("Still finalizing...")
+                next_progress = time.time() + 1.0
+            time.sleep(0.2)
+
+        print("Recorder is taking longer than expected. Sending terminate signal...")
+        if pid_exists(recorder_pid):
+            try:
+                os.kill(recorder_pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+        time.sleep(1)
+        if pid_exists(recorder_pid):
+            print("Recorder still running. Forcing stop...")
+            try:
+                os.kill(recorder_pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        clear_state()
+        if output_file and Path(output_file).exists():
+            print("Stopped recording (forced).")
+            print(f"Saved: {output_file} (grayscale + webcam overlay)")
+            if debug_sync:
+                write_sync_diagnostics(Path(output_file).parent, Path(output_file))
+            if rectest:
+                handle_rectest_flow(Path(output_file))
+            else:
+                handle_publish_flow(Path(output_file))
+            cleanup_recording_cache(Path(output_file).parent)
+            return 0
+        print("Stopped recording (forced), but no output was produced.")
+        return 1
+
     screen_pid = int(state.get("screen_pid", -1))
     av_pid = int(state.get("av_pid", -1))
     output_file = state.get("output_file", "")
     screen_file = state.get("screen_file", "")
     av_file = state.get("av_file", "")
+    debug_sync = bool(state.get("debug_sync"))
 
     if screen_pid <= 0 or av_pid <= 0:
         clear_state()
@@ -1033,6 +1337,13 @@ def stop_recording(rectest: bool = False) -> int:
         if screen_stopped and av_stopped:
             print("Combining screen with webcam+audio...")
             ok, err = finalize_recording(Path(screen_file), Path(av_file), Path(output_file))
+            if ok and debug_sync and output_file:
+                write_sync_diagnostics(
+                    Path(output_file).parent,
+                    Path(output_file),
+                    Path(screen_file),
+                    Path(av_file),
+                )
             clear_state()
             Path(screen_file).unlink(missing_ok=True)
             Path(av_file).unlink(missing_ok=True)
@@ -1089,6 +1400,13 @@ def stop_recording(rectest: bool = False) -> int:
 
     print("Combining screen with webcam+audio...")
     ok, err = finalize_recording(Path(screen_file), Path(av_file), Path(output_file))
+    if ok and debug_sync and output_file:
+        write_sync_diagnostics(
+            Path(output_file).parent,
+            Path(output_file),
+            Path(screen_file),
+            Path(av_file),
+        )
     clear_state()
     Path(screen_file).unlink(missing_ok=True)
     Path(av_file).unlink(missing_ok=True)
@@ -1147,7 +1465,8 @@ def clear_recordings(output_dir: Path) -> int:
     state = load_state()
     screen_pid = int(state.get("screen_pid", -1)) if state else -1
     av_pid = int(state.get("av_pid", -1)) if state else -1
-    if state and (pid_exists(screen_pid) or pid_exists(av_pid)):
+    recorder_pid = int(state.get("recorder_pid", -1)) if state else -1
+    if state and (pid_exists(screen_pid) or pid_exists(av_pid) or pid_exists(recorder_pid)):
         print("Cannot clear recordings while recording is active. Run: blog -stp")
         return 1
 
@@ -1215,6 +1534,7 @@ def main() -> int:
     parser.add_argument("-u", action="store_true", dest="upgrade")
     parser.add_argument("-e", action="store_true", dest="edit", help="Compose post in $EDITOR.")
     parser.add_argument("-m", dest="media", help="Media path to publish.")
+    parser.add_argument("--debug-sync", action="store_true", dest="debug_sync", help="Write timing diagnostics for recordings.")
     parser.add_argument("-rec", action="store_true", help="Start recording.")
     parser.add_argument("-stp", action="store_true", help="Stop recording and run trim+publish flow.")
     parser.add_argument("-rectest", action="store_true", help="Stop recording and save output.mp4 in current directory.")
@@ -1274,30 +1594,30 @@ def main() -> int:
                     print(f"- {failure}")
                 print("Recording did not start.")
                 return 1
-            return start_recording(Path(args.output_dir).expanduser())
+            return start_recording(Path(args.output_dir).expanduser(), debug_sync=bool(args.debug_sync))
         if args.stp:
-            if args.edit or args.media or args.text:
-                print("-stp does not accept post text/media flags.")
+            if args.edit or args.media or args.text or args.debug_sync:
+                print("-stp does not accept post text/media flags or --debug-sync.")
                 return 1
             return stop_recording()
         if args.rectest:
-            if args.edit or args.media or args.text:
-                print("-rectest does not accept post text/media flags.")
+            if args.edit or args.media or args.text or args.debug_sync:
+                print("-rectest does not accept post text/media flags or --debug-sync.")
                 return 1
             return stop_recording(rectest=True)
         if args.align:
-            if args.edit or args.media or args.text:
-                print("--align does not accept post text/media flags.")
+            if args.edit or args.media or args.text or args.debug_sync:
+                print("--align does not accept post text/media flags or --debug-sync.")
                 return 1
             return align_webcam()
         if args.play_latest:
-            if args.edit or args.media or args.text:
-                print("--play-latest does not accept post text/media flags.")
+            if args.edit or args.media or args.text or args.debug_sync:
+                print("--play-latest does not accept post text/media flags or --debug-sync.")
                 return 1
             return play_latest_recording(output_dir)
         if args.clear:
-            if args.edit or args.media or args.text:
-                print("--clear does not accept post text/media flags.")
+            if args.edit or args.media or args.text or args.debug_sync:
+                print("--clear does not accept post text/media flags or --debug-sync.")
                 return 1
             return clear_recordings(output_dir)
 
