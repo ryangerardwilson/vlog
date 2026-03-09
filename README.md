@@ -1,82 +1,61 @@
 # blog
 
-CLI to publish to X + LinkedIn, with optional media, and optional built-in screen recording.
+Terminal-native publisher and recorder that shells out to `x` and `linkedin`.
 
-## Core flow
-
-Publish text to all configured platforms:
+## Install
 
 ```bash
-python main.py "hello, world"
+curl -fsSL https://raw.githubusercontent.com/ryangerardwilson/blog/main/install.sh | bash
 ```
 
-Compose in `$VISUAL`, then `$EDITOR`, and publish:
+## Usage
 
-```bash
-python main.py -e
+```text
+blog CLI
+
+flags:
+  blog -h
+  blog -v
+  blog -u
+
+features:
+  publish text or media to the configured downstream CLIs
+  # blog <text> | blog -m <path> [<text>] | blog -e
+  blog "ship the patch"
+  blog -m ~/media/demo.mp4 "ship the patch"
+  blog -e
+
+  start recording, optionally with sync diagnostics
+  # blog -rec [-ds] [-o <path>]
+  blog -rec
+  blog -rec -ds
+
+  stop recording, trim, and publish
+  # blog -stp
+  blog -stp
+
+  stop recording, trim, and save ./output.mp4 without publishing
+  # blog -rectest
+  blog -rectest
+
+  inspect or clean the recording workspace
+  # blog -a | blog -pl [-o <path>] | blog -c [-o <path>]
+  blog -a
+  blog -pl
+  blog -c
 ```
 
-Publish with media:
+After `-stp`, recorder cache files in the output directory are auto-cleared.
 
-```bash
-python main.py "hello, world" -m /path/to/media.mp4
-```
+## Config
 
-Media-only publish (no post text):
-
-```bash
-python main.py -m /path/to/media.mp4
-```
-
-## Recording flow
-
-Start recording:
-
-```bash
-python main.py -rec
-```
-
-Start recording with sync diagnostics (writes a `sync_report_*.json` on stop):
-
-```bash
-python main.py -rec -ds
-```
-
-Stop recording, open trim UI, prompt for publish text, then publish:
-
-```bash
-python main.py -stp
-```
-
-Stop recording, open trim UI, and save local test output to `./output.mp4` (no social publish):
-
-```bash
-python main.py -rectest
-```
-
-After `-stp`, recorder cache files in the output directory are auto-cleared, so they do not accumulate.
-
-## Other flags
-
-- `-u`: upgrade to latest release
-- `-v`: print version
-- `-h`: show help
-- `-o`: recording directory (default: `~/.cache/blog/recordings`)
-- `-ds`: write sync diagnostics for a recording run
-- `-a`: webcam preview helper
-- `-pl`: detached playback of latest recording
-- `-c`: clear saved recordings
-
-## XDG config
-
-Config file:
+Config path:
 
 ```text
 ~/.config/blog/config.json
 ```
 
-Auto-created on first publish if missing.
-Template in repo: `template_config.json`
+Auto-created on first publish if missing. Template in repo: `template_config.json`
 
 Default:
 
@@ -84,26 +63,26 @@ Default:
 {
   "publish": {
     "x": {
-      "command": ["x"],
+      "command": ["x", "p"],
       "text_args": ["{text}"],
-      "media_args": ["{media}"]
+      "media_args": ["-m", "{media}"]
     },
     "linkedin": {
-      "command": ["linkedin"],
+      "command": ["linkedin", "p"],
       "text_args": ["{text}"],
-      "media_args": ["{media}"]
+      "media_args": ["-m", "{media}"]
     }
   }
 }
 ```
 
-Config supports two forms:
-- Simple: `"x": "x"` (blog app appends text/media positional args)
-- Structured: `command` + `text_args` + `media_args` (recommended for custom CLIs)
+Config forms:
+- Simple: `"x": "x"` or `["x"]`, which appends text and media positionally.
+- Structured: `command` + `text_args` + `media_args`, recommended when the downstream CLI uses a verb such as `p` and expects an explicit media flag.
 
 Placeholder tokens:
-- `{text}` -> post text
-- `{media}` -> media path
+- `{text}` becomes the post text.
+- `{media}` becomes the media path.
 
 Example custom integration:
 
@@ -119,8 +98,10 @@ Example custom integration:
 }
 ```
 
-## Install
+## Source Run
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ryangerardwilson/blog/main/install.sh | bash
+python -m venv .venv
+source .venv/bin/activate
+python main.py -h
 ```

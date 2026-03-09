@@ -63,29 +63,46 @@ def _muted_text(text: str) -> str:
 def print_usage_guide() -> None:
     print(
         _muted_text(
-        "Usage:\n"
-        "  blog \"post text\"              Publish text to all configured platforms\n"
-        "  blog -e                       Compose text in $VISUAL/$EDITOR and publish\n"
-        "  blog -m /path/to/media.mp4    Publish media only (or with text/-e)\n"
-        "  blog -rec                     Start recording\n"
-        "  blog -rec -ds                 Start recording with sync diagnostics\n"
-        "  blog -stp                     Stop recording, trim, and publish\n"
-        "  blog -rectest                 Stop recording, trim, and save ./output.mp4\n"
-        "  blog -v                       Print version\n"
-        "  blog -u                       Upgrade to latest version\n"
-        "  blog -h                       Show this help\n"
+        "Blog CLI\n"
+        "publish text or media and run the local recording flow from the terminal\n"
         "\n"
-        "Options:\n"
-        f"  -o <path>                     Recording directory (default: {DEFAULT_OUTPUT_DIR})\n"
-        "  -m <path>                     Media to publish with post\n"
-        "  -e                            Compose post in $VISUAL/$EDITOR\n"
-        "  -rec                          Start recording\n"
-        "  -ds                           Write ffmpeg/ffprobe sync diagnostics on stop\n"
-        "  -stp                          Stop recording and run trim+publish flow\n"
-        "  -rectest                      Stop recording and save output.mp4 in current directory\n"
-        "  -a                            Webcam preview helper\n"
-        "  -pl                           Play latest recording\n"
-        "  -c                            Clear saved recordings\n"
+        "flags:\n"
+        "  blog -h\n"
+        "    show this help\n"
+        "  blog -v\n"
+        "    print the installed version\n"
+        "  blog -u\n"
+        "    upgrade to the latest release\n"
+        "\n"
+        "features:\n"
+        "  publish text or media to the configured downstream CLIs\n"
+        "  # blog <text> | blog -m <path> [<text>] | blog -e\n"
+        "  blog \"ship the patch\"\n"
+        "  blog -m ~/media/demo.mp4 \"ship the patch\"\n"
+        "  blog -e\n"
+        "\n"
+        "  start recording, optionally with sync diagnostics\n"
+        "  # blog -rec [-ds] [-o <path>]\n"
+        "  blog -rec\n"
+        f"  blog -rec -ds -o {DEFAULT_OUTPUT_DIR}\n"
+        "\n"
+        "  stop recording, trim, and publish through the configured downstream CLIs\n"
+        "  # blog -stp\n"
+        "  blog -stp\n"
+        "\n"
+        "  stop recording, trim, and save ./output.mp4 without publishing\n"
+        "  # blog -rectest\n"
+        "  blog -rectest\n"
+        "\n"
+        "  inspect or clean the recording workspace\n"
+        "  # blog -a | blog -pl [-o <path>] | blog -c [-o <path>]\n"
+        "  blog -a\n"
+        "  blog -pl\n"
+        "  blog -c\n"
+        "\n"
+        "  current canonical flags\n"
+        f"  # -m <path>  -o <path>  -ds  -rec  -stp  -rectest  -a  -pl  -c\n"
+        f"  # default recording dir: {DEFAULT_OUTPUT_DIR}\n"
         )
     )
 
@@ -333,7 +350,7 @@ def preflight_publish_auth(config: dict) -> tuple[bool, list[str]]:
         executable = os.path.basename(cmd[0])
         if executable not in ("x", "linkedin"):
             continue
-        proc = subprocess.run(cmd + ["-ea"])
+        proc = subprocess.run([cmd[0], "ea"])
         if proc.returncode != 0:
             failures.append(f"{target_name}: auth preflight failed with exit code {proc.returncode}")
     return len(failures) == 0, failures
