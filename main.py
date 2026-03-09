@@ -86,9 +86,6 @@ def print_usage_guide() -> None:
         "  -a                            Webcam preview helper\n"
         "  -pl                           Play latest recording\n"
         "  -c                            Clear saved recordings\n"
-        f"\nConfig:\n"
-        f"  {CONFIG_FILE} (auto-created)\n"
-        "  publish.x / publish.linkedin control publish commands\n"
         )
     )
 
