@@ -41,6 +41,8 @@ WEB_CRF = "28"
 WEB_PRESET = "veryfast"
 WEB_AUDIO_BITRATE = "128k"
 WEBCAM_WIDTH = "360"
+ANSI_RESET = "\033[0m"
+ANSI_GRAY = "\033[38;5;245m"
 
 
 def default_config() -> dict:
@@ -52,8 +54,15 @@ def default_config() -> dict:
     }
 
 
+def _muted_text(text: str) -> str:
+    if not sys.stdout.isatty() or "NO_COLOR" in os.environ:
+        return text
+    return f"{ANSI_GRAY}{text}{ANSI_RESET}"
+
+
 def print_usage_guide() -> None:
     print(
+        _muted_text(
         "Usage:\n"
         "  blog \"post text\"              Publish text to all configured platforms\n"
         "  blog -e                       Compose text in $VISUAL/$EDITOR and publish\n"
@@ -80,6 +89,7 @@ def print_usage_guide() -> None:
         f"\nConfig:\n"
         f"  {CONFIG_FILE} (auto-created)\n"
         "  publish.x / publish.linkedin control publish commands\n"
+        )
     )
 
 
