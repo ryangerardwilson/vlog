@@ -20,10 +20,10 @@ flags:
 
 features:
   publish text or media to the configured downstream CLIs
-  # blog <text> | blog -m <path> [<text>] | blog -e
-  blog "ship the patch"
-  blog -m ~/media/demo.mp4 "ship the patch"
-  blog -e
+  # blog p <text> | blog p -m <path> [<text>] | blog p -e
+  blog p "ship the patch"
+  blog p -m ~/media/demo.mp4 "ship the patch"
+  blog p -e
 
   start recording, optionally with sync diagnostics
   # blog -rec [-ds] [-o <path>]
@@ -53,6 +53,12 @@ Config path:
 
 ```text
 ~/.config/blog/config.json
+```
+
+Open it with:
+
+```bash
+blog conf
 ```
 
 Auto-created on first publish if missing. Template in repo: `template_config.json`

@@ -8,11 +8,17 @@
 ## CLI Contract
 - Canonical app flags are short only.
 - Current canonical flags are `-h`, `-v`, `-u`, `-e`, `-m`, `-o`, `-ds`, `-rec`, `-stp`, `-rectest`, `-a`, `-pl`, `-c`.
+- Publish grammar is explicit and verb-led:
+  - `blog p "text"`
+  - `blog p -m /path/to/file "text"`
+  - `blog p -e`
+- Do not allow bare text or bare media invocation to publish directly.
 - `blog` with no action and no content should print the same help text as `blog -h`.
 - Help, README examples, and runtime error strings must reference only canonical short flags.
 
 ## Config And Storage
 - Config lives at `~/.config/blog/config.json` unless `XDG_CONFIG_HOME` overrides it.
+- Because `blog` owns a real config file, keep `blog conf` working and documented.
 - Cache lives under `~/.cache/blog/`, recordings under `~/.cache/blog/recordings`, and recorder state under `~/.local/state/blog/` unless XDG env vars override them.
 - Keep config as plain JSON with explicit publish-command shape.
 - Preserve the structured publish config form using `command`, `text_args`, and `media_args`.

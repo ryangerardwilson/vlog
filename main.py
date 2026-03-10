@@ -48,8 +48,16 @@ ANSI_GRAY = "\033[38;5;245m"
 def default_config() -> dict:
     return {
         "publish": {
-            "x": "x",
-            "linkedin": "linkedin",
+            "x": {
+                "command": ["x", "p"],
+                "text_args": ["{text}"],
+                "media_args": ["-m", "{media}"],
+            },
+            "linkedin": {
+                "command": ["linkedin", "p"],
+                "text_args": ["{text}"],
+                "media_args": ["-m", "{media}"],
+            },
         }
     }
 
@@ -78,10 +86,10 @@ def print_usage_guide() -> None:
         "\n"
         "features:\n"
         "  publish text or media to the configured downstream CLIs\n"
-        "  # blog <text> | blog -m <path> [<text>] | blog -e\n"
-        "  blog \"ship the patch\"\n"
-        "  blog -m ~/media/demo.mp4 \"ship the patch\"\n"
-        "  blog -e\n"
+        "  # blog p <text> | blog p -m <path> [<text>] | blog p -e\n"
+        "  blog p \"ship the patch\"\n"
+        "  blog p -m ~/media/demo.mp4 \"ship the patch\"\n"
+        "  blog p -e\n"
         "\n"
         "  start recording, optionally with sync diagnostics\n"
         "  # blog -rec [-ds] [-o <path>]\n"
@@ -218,6 +226,10 @@ def load_or_init_config() -> dict:
     publish = parsed.get("publish")
     if not isinstance(publish, dict):
         parsed["publish"] = defaults["publish"]
+        return parsed
+    for target_name in ("x", "linkedin"):
+        if publish.get(target_name) == target_name:
+            publish[target_name] = defaults["publish"][target_name]
     return parsed
 
 
@@ -1593,6 +1605,7 @@ def main() -> int:
         default=str(DEFAULT_OUTPUT_DIR),
         help=f"Output directory for recordings (default: {DEFAULT_OUTPUT_DIR})",
     )
+    parser.add_argument("command", nargs="?")
     parser.add_argument("text", nargs="*", help="Post text.")
 
     args = parser.parse_args()
@@ -1622,8 +1635,14 @@ def main() -> int:
             bool(args.play_latest),
             bool(args.clear),
         ]
+        if args.command and args.command != "p":
+            print("Use: blog p <text> | blog p -m <path> [<text>] | blog p -e")
+            return 1
         if sum(action_flags) > 1:
             print("Use only one action flag at a time: -rec, -stp, -rectest, -a, -pl, -c.")
+            return 1
+        if any(action_flags) and args.command:
+            print("Recorder actions do not accept a publish command.")
             return 1
 
         output_dir = Path(args.output_dir).expanduser()
@@ -1677,6 +1696,10 @@ def main() -> int:
             if not text:
                 print("No content; cancelled.")
                 return 1
+
+        if args.command != "p":
+            print_usage_guide()
+            return 1
 
         if text is None and media_file is None:
             print_usage_guide()
