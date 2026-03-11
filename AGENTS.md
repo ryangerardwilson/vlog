@@ -1,5 +1,10 @@
 # blog Agent Guide
 
+## Workspace Defaults
+- Follow `/home/ryan/Documents/agent_context/CLI_TUI_STYLE_GUIDE.md` for CLI/TUI taste and help shape.
+- Follow `/home/ryan/Documents/agent_context/CANONICAL_REFERENCE_IMPLEMENTATION_FOR_CLI_AND_TUI_APPS.md` for executable contract details such as `-h`, `-v`, `-u`, installer behavior, release workflow expectations, and regression expectations.
+- This file only records `blog`-specific constraints or durable deviations.
+
 ## Scope
 - `blog` is a terminal-native publisher and recorder that coordinates local recording flow with explicit downstream publish commands.
 - Keep it keyboard-first and inspectable. It is not a web dashboard or background automation system.
@@ -33,5 +38,6 @@
 - Keep output plain-text and operationally useful.
 
 ## Release Guardrails
-- Use a single runtime version module and have GitHub Actions inject the tag-derived release version during the build.
+- Use a single runtime version module and keep the checked-in value as a placeholder.
+- Have GitHub Actions inject the tag-derived release version during the build.
 - Do not hand-edit checked-in release numbers before tagging.
