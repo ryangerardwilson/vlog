@@ -16,15 +16,12 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-try:
-    from _version import __version__
-except Exception:
-    __version__ = "0.0.0"
+from _version import __version__
+from rgw_cli_contract import AppSpec, resolve_install_script_path, run_app
 
 APP = "blog"
 REPO = "ryangerardwilson/blog"
-LATEST_RELEASE_API = f"https://api.github.com/repos/{REPO}/releases/latest"
-INSTALL_SCRIPT_URL = f"https://raw.githubusercontent.com/{REPO}/main/install.sh"
+INSTALL_SCRIPT = resolve_install_script_path(__file__)
 
 LOCK_FILE = Path("/tmp/blog_recorder_cli.lock")
 XDG_CONFIG_HOME = Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config")))
@@ -43,6 +40,49 @@ WEB_AUDIO_BITRATE = "128k"
 WEBCAM_WIDTH = "360"
 ANSI_RESET = "\033[0m"
 ANSI_GRAY = "\033[38;5;245m"
+HELP_TEXT = f"""Blog CLI
+publish text or media and run the local recording flow from the terminal
+
+flags:
+  blog -h
+    show this help
+  blog -v
+    print the installed version
+  blog -u
+    upgrade to the latest release
+  blog conf
+    open the config in $VISUAL/$EDITOR
+
+features:
+  publish text or media to the configured downstream CLIs
+  # blog p <text> | blog p -m <path> [<text>] | blog p -e
+  blog p "ship the patch"
+  blog p -m ~/media/demo.mp4 "ship the patch"
+  blog p -e
+
+  start recording, optionally with sync diagnostics
+  # blog -rec [-ds] [-o <path>]
+  blog -rec
+  blog -rec -ds -o {DEFAULT_OUTPUT_DIR}
+
+  stop recording, trim, and publish through the configured downstream CLIs
+  # blog -stp
+  blog -stp
+
+  stop recording, trim, and save ./output.mp4 without publishing
+  # blog -rectest
+  blog -rectest
+
+  inspect or clean the recording workspace
+  # blog -a | blog -pl [-o <path>] | blog -c [-o <path>]
+  blog -a
+  blog -pl
+  blog -c
+
+  current canonical flags
+  # -m <path>  -o <path>  -ds  -rec  -stp  -rectest  -a  -pl  -c
+  # default recording dir: {DEFAULT_OUTPUT_DIR}
+"""
 
 
 def default_config() -> dict:
@@ -69,99 +109,7 @@ def _muted_text(text: str) -> str:
 
 
 def print_usage_guide() -> None:
-    print(
-        _muted_text(
-        "Blog CLI\n"
-        "publish text or media and run the local recording flow from the terminal\n"
-        "\n"
-        "flags:\n"
-        "  blog -h\n"
-        "    show this help\n"
-        "  blog -v\n"
-        "    print the installed version\n"
-        "  blog -u\n"
-        "    upgrade to the latest release\n"
-        "  blog conf\n"
-        "    open the config in $VISUAL/$EDITOR\n"
-        "\n"
-        "features:\n"
-        "  publish text or media to the configured downstream CLIs\n"
-        "  # blog p <text> | blog p -m <path> [<text>] | blog p -e\n"
-        "  blog p \"ship the patch\"\n"
-        "  blog p -m ~/media/demo.mp4 \"ship the patch\"\n"
-        "  blog p -e\n"
-        "\n"
-        "  start recording, optionally with sync diagnostics\n"
-        "  # blog -rec [-ds] [-o <path>]\n"
-        "  blog -rec\n"
-        f"  blog -rec -ds -o {DEFAULT_OUTPUT_DIR}\n"
-        "\n"
-        "  stop recording, trim, and publish through the configured downstream CLIs\n"
-        "  # blog -stp\n"
-        "  blog -stp\n"
-        "\n"
-        "  stop recording, trim, and save ./output.mp4 without publishing\n"
-        "  # blog -rectest\n"
-        "  blog -rectest\n"
-        "\n"
-        "  inspect or clean the recording workspace\n"
-        "  # blog -a | blog -pl [-o <path>] | blog -c [-o <path>]\n"
-        "  blog -a\n"
-        "  blog -pl\n"
-        "  blog -c\n"
-        "\n"
-        "  current canonical flags\n"
-        f"  # -m <path>  -o <path>  -ds  -rec  -stp  -rectest  -a  -pl  -c\n"
-        f"  # default recording dir: {DEFAULT_OUTPUT_DIR}\n"
-        )
-    )
-
-
-def _fetch_latest_version() -> str:
-    request = urllib.request.Request(
-        LATEST_RELEASE_API,
-        headers={"Accept": "application/vnd.github+json"},
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=15) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-    except urllib.error.URLError as exc:
-        raise RuntimeError(f"Failed to fetch latest release: {exc}") from exc
-    except json.JSONDecodeError as exc:
-        raise RuntimeError(f"Failed to parse latest release payload: {exc}") from exc
-
-    tag = str(payload.get("tag_name", "")).strip()
-    if not tag:
-        raise RuntimeError("Latest release does not contain a valid tag_name.")
-    return tag[1:] if tag.startswith("v") else tag
-
-
-def upgrade_to_latest() -> int:
-    curl = shutil.which("curl")
-    bash = shutil.which("bash")
-    if not curl:
-        print("curl not found in PATH.", file=sys.stderr)
-        return 1
-    if not bash:
-        print("bash not found in PATH.", file=sys.stderr)
-        return 1
-
-    print(f"Running {APP} upgrade...")
-    with tempfile.NamedTemporaryFile(suffix=".sh", delete=False) as tmp:
-        tmp_path = Path(tmp.name)
-
-    try:
-        fetch = subprocess.run([curl, "-fsSL", INSTALL_SCRIPT_URL, "-o", str(tmp_path)])
-        if fetch.returncode != 0:
-            print("Failed to download installer script.", file=sys.stderr)
-            return fetch.returncode
-        run = subprocess.run([bash, str(tmp_path), "-u"])
-        return run.returncode
-    finally:
-        try:
-            tmp_path.unlink(missing_ok=True)
-        except OSError:
-            pass
+    print(_muted_text(HELP_TEXT.rstrip()))
 
 
 def pid_exists(pid: int) -> bool:
@@ -1572,14 +1520,8 @@ def align_webcam() -> int:
     return proc.returncode
 
 
-def main() -> int:
-    if len(sys.argv) == 2 and sys.argv[1] == "conf":
-        return open_config_in_editor()
-
+def _dispatch(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument("-h", action="store_true", dest="help_flag")
-    parser.add_argument("-v", action="store_true", dest="version")
-    parser.add_argument("-u", action="store_true", dest="upgrade")
     parser.add_argument("-e", action="store_true", dest="edit", help="Compose post in $VISUAL/$EDITOR.")
     parser.add_argument("-m", dest="media", help="Media path to publish.")
     parser.add_argument("-ds", action="store_true", dest="debug_sync", help="Write timing diagnostics for recordings.")
@@ -1598,16 +1540,7 @@ def main() -> int:
     parser.add_argument("command", nargs="?")
     parser.add_argument("text", nargs="*", help="Post text.")
 
-    args = parser.parse_args()
-
-    if args.help_flag:
-        print_usage_guide()
-        return 0
-    if args.version:
-        print(__version__)
-        return 0
-    if args.upgrade:
-        return upgrade_to_latest()
+    args = parser.parse_args(argv)
 
     LOCK_FILE.parent.mkdir(parents=True, exist_ok=True)
     with LOCK_FILE.open("w") as lock_fp:
@@ -1696,6 +1629,22 @@ def main() -> int:
             return 1
 
         return publish_from_cli(text, media_file)
+
+
+APP_SPEC = AppSpec(
+    app_name="blog",
+    version=__version__,
+    help_text=HELP_TEXT,
+    install_script_path=INSTALL_SCRIPT,
+    no_args_mode="help",
+    config_path_factory=lambda: CONFIG_FILE,
+    config_bootstrap_text=json.dumps(default_config(), indent=2) + "\n",
+)
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = list(sys.argv[1:] if argv is None else argv)
+    return run_app(APP_SPEC, args, _dispatch)
 
 
 if __name__ == "__main__":

@@ -58,12 +58,14 @@ jobs:
               PYBIN="/opt/py/python/bin/python3"
               export LD_LIBRARY_PATH="/opt/py/python/lib:${LD_LIBRARY_PATH:-}"
               "$PYBIN" -m pip install -U pip
+              "$PYBIN" -m pip install --only-binary=:all: -r requirements.txt
               "$PYBIN" -m pip install --only-binary=:all: pyinstaller
 
               echo "__version__ = \"${VERSION}\"" > _version.py
 
               "$PYBIN" -m PyInstaller --clean --onedir --name blog \
                 main.py
+              cp install.sh dist/blog/
 
               tar -C dist -czf blog-linux-x64.tar.gz blog
             '

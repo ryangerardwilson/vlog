@@ -6,6 +6,7 @@ REPO="ryangerardwilson/blog"
 APP_HOME="$HOME/.${APP}"
 INSTALL_DIR="$APP_HOME/bin"
 APP_DIR="$APP_HOME/app"
+FILENAME="blog-linux-x64.tar.gz"
 
 MUTED='\033[0;2m'
 RED='\033[0;31m'
@@ -13,38 +14,41 @@ ORANGE='\033[38;5;214m'
 NC='\033[0m'
 
 usage() {
-  cat <<USAGE
+  cat <<EOF
 ${APP} Installer
 
 Usage: install.sh [options]
 
 Options:
-  -h, --help              Display this help message
-  -v, --version [version] Print the latest release version, or install a specific version
-  -u, --upgrade           Upgrade to the latest release when newer than installed
-  -b, --binary <path>     Install from a local binary instead of downloading
-      --no-modify-path    Don't modify shell config files (.zshrc, .bashrc, etc.)
-
-Examples:
-  curl -fsSL https://raw.githubusercontent.com/${REPO}/main/install.sh | bash
-  curl -fsSL https://raw.githubusercontent.com/${REPO}/main/install.sh | bash -s -- -v 0.1.0
-  ./install.sh -u
-  ./install.sh --binary /path/to/blog
-USAGE
+  -h                         Show this help and exit
+  -v [<version>]             Print the latest release version, or install a specific one
+  -u                         Upgrade to the latest release only when newer
+  -b <path>                  Install from a local binary instead of downloading
+  -n                         Do not modify shell config to add to PATH
+      --help                 Compatibility alias for -h
+      --version [<version>]  Compatibility alias for -v
+      --upgrade              Compatibility alias for -u
+      --binary <path>        Compatibility alias for -b
+      --no-modify-path       Compatibility alias for -n
+EOF
 }
 
 requested_version=${VERSION:-}
-no_modify_path=false
-binary_path=""
 show_latest=false
 upgrade=false
+no_modify_path=false
+binary_path=""
+latest_version_cache=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    -h|--help) usage; exit 0 ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
     -v|--version)
       if [[ -n "${2:-}" && "${2:0:1}" != "-" ]]; then
-        requested_version="$2"
+        requested_version="${2#v}"
         shift 2
       else
         show_latest=true
@@ -56,11 +60,11 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     -b|--binary)
-      [[ -n "${2:-}" ]] || { echo -e "${RED}Error: --binary requires a path${NC}"; exit 1; }
+      [[ -n "${2:-}" ]] || { echo -e "${RED}Error: -b requires a path${NC}"; exit 1; }
       binary_path="$2"
       shift 2
       ;;
-    --no-modify-path)
+    -n|--no-modify-path)
       no_modify_path=true
       shift
       ;;
@@ -79,36 +83,40 @@ print_message() {
   echo -e "${color}${message}${NC}"
 }
 
+die() {
+  print_message error "$1"
+  exit 1
+}
+
 get_latest_version() {
-  local latest=""
-  if command -v gh >/dev/null 2>&1; then
-    latest="$(gh release view --repo "${REPO}" --json tagName --jq '.tagName' 2>/dev/null || true)"
-    latest="${latest#v}"
+  command -v curl >/dev/null 2>&1 || die "'curl' is required but not installed."
+  if [[ -z "$latest_version_cache" ]]; then
+    local release_url
+    local tag
+    release_url="$(curl -fsSL -o /dev/null -w "%{url_effective}" "https://github.com/${REPO}/releases/latest")" \
+      || die "Unable to determine latest release"
+    tag="${release_url##*/}"
+    tag="${tag#v}"
+    [[ -n "$tag" && "$tag" != "latest" ]] || die "Unable to determine latest release"
+    latest_version_cache="$tag"
   fi
-  if [[ -z "$latest" ]]; then
-    command -v curl >/dev/null 2>&1 || { print_message error "'curl' is required but not installed."; exit 1; }
-    latest="$(curl -fsSL -o /dev/null -w '%{url_effective}' "https://github.com/${REPO}/releases/latest" \
-      | sed -n 's#.*/releases/tag/v\([^/?#[:space:]]*\).*#\1#p')"
-  fi
-  [[ -n "$latest" ]] || { print_message error "Unable to determine the latest release version"; exit 1; }
-  printf '%s\n' "$latest"
+  printf '%s\n' "$latest_version_cache"
 }
 
 if $show_latest; then
-  [[ "$upgrade" == false && -z "$binary_path" && -z "$requested_version" ]] || {
-    print_message error "-v (no arg) cannot be combined with other options"
-    exit 1
-  }
+  [[ "$upgrade" == false && -z "$binary_path" && -z "$requested_version" ]] || \
+    die "-v (no arg) cannot be combined with other options"
   get_latest_version
   exit 0
 fi
 
 if $upgrade; then
-  [[ -z "$binary_path" ]] || { print_message error "-u cannot be used with -b/--binary"; exit 1; }
-  [[ -z "$requested_version" ]] || { print_message error "-u cannot be combined with -v"; exit 1; }
+  [[ -z "$binary_path" ]] || die "-u cannot be used with -b"
+  [[ -z "$requested_version" ]] || die "-u cannot be combined with -v <version>"
   requested_version="$(get_latest_version)"
   if command -v "${APP}" >/dev/null 2>&1; then
     installed_version="$(${APP} -v 2>/dev/null || true)"
+    installed_version="${installed_version#v}"
     if [[ -n "$installed_version" && "$installed_version" == "$requested_version" ]]; then
       print_message info "${MUTED}${APP} version ${NC}${requested_version}${MUTED} already installed${NC}"
       exit 0
@@ -141,18 +149,13 @@ else
   command -v curl >/dev/null 2>&1 || { print_message error "'curl' is required but not installed."; exit 1; }
   command -v tar  >/dev/null 2>&1 || { print_message error "'tar' is required but not installed."; exit 1; }
 
-  filename="${APP}-linux-x64.tar.gz"
   mkdir -p "$APP_DIR"
 
   if [[ -z "$requested_version" ]]; then
-    requested_version="$(get_latest_version)"
-    url="https://github.com/${REPO}/releases/latest/download/${filename}"
-    specific_version="${requested_version}"
+    specific_version="$(get_latest_version)"
   else
     requested_version="${requested_version#v}"
-    url="https://github.com/${REPO}/releases/download/v${requested_version}/${filename}"
     specific_version="${requested_version}"
-
     http_status=$(curl -sI -o /dev/null -w "%{http_code}" "https://github.com/${REPO}/releases/tag/v${requested_version}")
     if [[ "$http_status" == "404" ]]; then
       print_message error "Release v${requested_version} not found"
@@ -161,8 +164,10 @@ else
     fi
   fi
 
+  url="https://github.com/${REPO}/releases/download/v${specific_version}/${FILENAME}"
+
   if command -v "${APP}" >/dev/null 2>&1; then
-    installed_version=$(${APP} -v 2>/dev/null || true)
+    installed_version="$(${APP} -v 2>/dev/null || true)"
     if [[ -n "$installed_version" && "$installed_version" == "$specific_version" ]]; then
       print_message info "${MUTED}${APP} version ${NC}${specific_version}${MUTED} already installed${NC}"
       exit 0
@@ -173,8 +178,8 @@ else
   tmp_dir="${TMPDIR:-/tmp}/${APP}_install_$$"
   mkdir -p "$tmp_dir"
 
-  curl -# -L -o "$tmp_dir/$filename" "$url"
-  tar -xzf "$tmp_dir/$filename" -C "$tmp_dir"
+  curl -# -L -o "$tmp_dir/$FILENAME" "$url"
+  tar -xzf "$tmp_dir/$FILENAME" -C "$tmp_dir"
 
   if [[ ! -f "$tmp_dir/${APP}/${APP}" ]]; then
     print_message error "Archive did not contain expected directory '${APP}/${APP}'"
@@ -184,15 +189,14 @@ else
 
   rm -rf "$APP_DIR"
   mkdir -p "$APP_DIR"
-
   mv "$tmp_dir/${APP}" "$APP_DIR"
   rm -rf "$tmp_dir"
 
-  cat > "${INSTALL_DIR}/${APP}" <<SHIM
+  cat > "${INSTALL_DIR}/${APP}" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
 "${HOME}/.${APP}/app/${APP}/${APP}" "\$@"
-SHIM
+EOF
   chmod 755 "${INSTALL_DIR}/${APP}"
 fi
 
@@ -229,7 +233,10 @@ if [[ "$no_modify_path" != "true" ]]; then
 
     config_file=""
     for f in "${config_candidates[@]}"; do
-      if [[ -f "$f" ]]; then config_file="$f"; break; fi
+      if [[ -f "$f" ]]; then
+        config_file="$f"
+        break
+      fi
     done
 
     if [[ -z "$config_file" ]]; then
@@ -245,7 +252,4 @@ if [[ "$no_modify_path" != "true" ]]; then
   fi
 fi
 
-echo ""
-print_message info "${MUTED}Installed ${NC}${APP}${MUTED} to ${NC}${INSTALL_DIR}/${APP}"
 print_message info "${MUTED}Run:${NC} ${APP} -h"
-echo ""
