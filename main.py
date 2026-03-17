@@ -38,8 +38,6 @@ WEB_CRF = "28"
 WEB_PRESET = "veryfast"
 WEB_AUDIO_BITRATE = "128k"
 WEBCAM_WIDTH = "360"
-ANSI_RESET = "\033[0m"
-ANSI_GRAY = "\033[38;5;245m"
 HELP_TEXT = f"""Blog CLI
 publish text or media and run the local recording flow from the terminal
 
@@ -102,14 +100,8 @@ def default_config() -> dict:
     }
 
 
-def _muted_text(text: str) -> str:
-    if not sys.stdout.isatty() or "NO_COLOR" in os.environ:
-        return text
-    return f"{ANSI_GRAY}{text}{ANSI_RESET}"
-
-
 def print_usage_guide() -> None:
-    print(_muted_text(HELP_TEXT.rstrip()))
+    print(HELP_TEXT.rstrip())
 
 
 def pid_exists(pid: int) -> bool:
