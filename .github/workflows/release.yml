@@ -65,6 +65,7 @@ jobs:
 
               "$PYBIN" -m PyInstaller --clean --onedir --name blog \
                 main.py
+              "$PYBIN" .github/scripts/clear-execstack.py dist/blog
               cp install.sh dist/blog/
 
               tar -C dist -czf blog-linux-x64.tar.gz blog
