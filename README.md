@@ -8,6 +8,13 @@ Terminal-native publisher and recorder that shells out to `x` and `linkedin`.
 curl -fsSL https://raw.githubusercontent.com/ryangerardwilson/blog/main/install.sh | bash
 ```
 
+Manually add this to `~/.bashrc`, then reload your shell:
+
+```bash
+export PATH="$HOME/.blog/bin:$PATH"
+source ~/.bashrc
+```
+
 `blog -v` prints the installed app version from `_version.py`. Source checkouts
 keep the checked-in placeholder at `0.0.0`; tagged release builds stamp the
 shipped artifact with the real version.
