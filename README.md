@@ -8,10 +8,11 @@ Terminal-native publisher and recorder that shells out to `x` and `linkedin`.
 curl -fsSL https://raw.githubusercontent.com/ryangerardwilson/blog/main/install.sh | bash
 ```
 
-Manually add this to `~/.bashrc`, then reload your shell:
+If `~/.local/bin` is not already on your `PATH`, add it once to `~/.bashrc`
+and reload your shell:
 
 ```bash
-export PATH="$HOME/.blog/bin:$PATH"
+export PATH="$HOME/.local/bin:$PATH"
 source ~/.bashrc
 ```
 
