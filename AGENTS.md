@@ -2,7 +2,7 @@
 
 ## Workspace Defaults
 - Follow `/home/ryan/Subagents/cpo/CLI_TUI_STYLE_GUIDE.md` for CLI/TUI taste and help shape.
-- Follow `/home/ryan/Subagents/cto/CANONICAL_REFERENCE_IMPLEMENTATION_FOR_CLI_AND_TUI_APPS.md` for executable contract details such as `-h`, `-v`, `-u`, installer behavior, release workflow expectations, and regression expectations.
+- Follow `/home/ryan/Subagents/cto/CANONICAL_REFERENCE_IMPLEMENTATION_FOR_CLI_AND_TUI_APPS.md` for executable contract details such as `help`, `version`, `upgrade`, installer behavior, release workflow expectations, and regression expectations.
 - This file only records `blog`-specific constraints or durable deviations.
 
 ## Scope
@@ -11,7 +11,7 @@
 - Supported primary flows are: publish text/media, compose in-editor, record, stop-and-publish, stop-and-save-test output, align webcam, play latest, clear recordings, version, and upgrade.
 
 ## CLI Contract
-- Canonical app flags are short only: `-h`, `-v`, `-u`.
+- Canonical app actions use words only: `help`, `version`, `upgrade`.
 - Canonical command grammar is declarative English only:
   - `blog publish "text"`
   - `blog publish media /path/to/file body "text"`
@@ -25,8 +25,8 @@
   - `blog config`
 - Do not keep terse aliases or action flags such as `p`, `conf`, `-e`, `-m`, `-o`, `-ds`, `-rec`, `-stp`, `-rectest`, `-a`, `-pl`, or `-c`.
 - Do not allow bare text or bare media invocation to publish directly.
-- `blog` with no action and no content should print the same help text as `blog -h`.
-- Help, README examples, and runtime error strings must reference only canonical flags and declarative command forms.
+- `blog` with no action and no content should print the same help text as `blog help`.
+- Help, README examples, and runtime error strings must reference only canonical actions and declarative command forms.
 
 ## Config And Storage
 - Config lives at `~/.config/blog/config.json` unless `XDG_CONFIG_HOME` overrides it.

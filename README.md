@@ -16,7 +16,7 @@ export PATH="$HOME/.local/bin:$PATH"
 source ~/.bashrc
 ```
 
-`blog -v` prints the installed app version from `_version.py`. Source checkouts
+`blog version` prints the installed app version from `_version.py`. Source checkouts
 keep the checked-in placeholder at `0.0.0`; tagged release builds stamp the
 shipped artifact with the real version.
 
@@ -25,10 +25,10 @@ shipped artifact with the real version.
 ```text
 blog CLI
 
-flags:
-  blog -h
-  blog -v
-  blog -u
+global actions:
+  blog help
+  blog version
+  blog upgrade
 
 features:
   open the publish config in the editor
@@ -121,5 +121,5 @@ Example custom integration:
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-python main.py -h
+python main.py help
 ```

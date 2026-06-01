@@ -28,22 +28,22 @@ class HelpOutputTests(unittest.TestCase):
             check=True,
         )
         help_arg = subprocess.run(
-            [sys.executable, str(APP), "-h"],
+            [sys.executable, str(APP), "help"],
             capture_output=True,
             text=True,
             check=True,
         )
         self.assertEqual(no_arg.stdout, help_arg.stdout)
 
-    def test_help_uses_flags_and_features_layout(self):
+    def test_help_uses_global_actions_and_features_layout(self):
         result = subprocess.run(
-            [sys.executable, str(APP), "-h"],
+            [sys.executable, str(APP), "help"],
             capture_output=True,
             text=True,
             check=True,
         )
 
-        self.assertIn("flags:\n", result.stdout)
+        self.assertIn("global actions:\n", result.stdout)
         self.assertIn("features:\n", result.stdout)
         self.assertIn("blog config", result.stdout)
         self.assertIn("# blog publish <text> | blog publish media <path> body <text> | blog publish in editor", result.stdout)
@@ -80,7 +80,7 @@ class HelpOutputTests(unittest.TestCase):
 
     def test_version_prints_single_value(self):
         result = subprocess.run(
-            [sys.executable, str(APP), "-v"],
+            [sys.executable, str(APP), "version"],
             capture_output=True,
             text=True,
             check=True,
@@ -92,12 +92,12 @@ class HelpOutputTests(unittest.TestCase):
 
         with patch("main.subprocess.run") as subprocess_run:
             subprocess_run.return_value.returncode = 0
-            rc = main(["-u"])
+            rc = main(["upgrade"])
 
         self.assertEqual(rc, 0)
         self.assertEqual(
             subprocess_run.call_args.args[0],
-            ["/usr/bin/env", "bash", str(INSTALL_SCRIPT), "-u"],
+            ["/usr/bin/env", "bash", str(INSTALL_SCRIPT), "upgrade"],
         )
 
 

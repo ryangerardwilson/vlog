@@ -42,12 +42,12 @@ WEBCAM_WIDTH = "360"
 HELP_TEXT = f"""Blog CLI
 publish text or media and run the local recording flow from the terminal
 
-flags:
-  blog -h
+global actions:
+  blog help
     show this help
-  blog -v
+  blog version
     print the installed version
-  blog -u
+  blog upgrade
     upgrade to the latest release
 
 features:
@@ -112,7 +112,7 @@ def print_usage_guide() -> None:
 def upgrade_app() -> int:
     if INSTALL_SCRIPT.exists():
         result = subprocess.run(
-            ["/usr/bin/env", "bash", str(INSTALL_SCRIPT), "-u"],
+            ["/usr/bin/env", "bash", str(INSTALL_SCRIPT), "upgrade"],
             check=False,
             text=True,
             env=os.environ.copy(),
@@ -129,7 +129,7 @@ def upgrade_app() -> int:
     try:
         script_path.chmod(0o700)
         result = subprocess.run(
-            ["/usr/bin/env", "bash", str(script_path), "-u"],
+            ["/usr/bin/env", "bash", str(script_path), "upgrade"],
             check=False,
             text=True,
             env=os.environ.copy(),
@@ -1642,16 +1642,16 @@ def main(argv: list[str] | None = None) -> int:
     if not args:
         print_help()
         return 0
-    if args == ["-h"]:
+    if args == ["help"]:
         print_help()
         return 0
-    if args == ["-v"]:
+    if args == ["version"]:
         print(__version__)
         return 0
-    if args == ["-u"]:
+    if args == ["upgrade"]:
         return upgrade_app()
-    if args[0] in {"-h", "-v", "-u"}:
-        raise SystemExit("Use blog -h, blog -v, or blog -u by itself.")
+    if args[0] in {"help", "version", "upgrade"}:
+        raise SystemExit("Use blog help, blog version, or blog upgrade by itself.")
     return _dispatch(args)
 
 
